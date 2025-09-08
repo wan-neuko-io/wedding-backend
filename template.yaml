@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS Template for microservices event-driven backend architecture
+
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - staging
+      - production
+  LambdaRuntime:
+    Type: String
+    Default: nodejs20.x
+  DomainName:
+    Type: String
+    Default: exampledomain.com
+  LocalhostPort:
+    Type: String
+    Default: '8888'
+
+Conditions:
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+
+  # DependenciesLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     LayerName: !Sub ${NodeEnv}-${Project}-dependencies-layer
+  #     Description: !Sub ${NodeEnv}-${Project}-dependencies-layer
+  #     ContentUri: ./layers
+  #     CompatibleRuntimes:
+  #       - !Ref LambdaRuntime
+  #     LicenseInfo: Available under the MIT-0 license.
+  #     RetentionPolicy: Retain
+
+  EventBus:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./src/events/template.yaml
+      Parameters:
+        Project: !Ref Project
+        NodeEnv: !Ref NodeEnv
+        LambdaRuntime: !Ref LambdaRuntime
+        # DependenciesLayer: !Ref DependenciesLayer
+
+  Shared:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./src/shared/template.yaml
+      Parameters:
+        Project: !Ref Project
+        NodeEnv: !Ref NodeEnv
+        LambdaRuntime: !Ref LambdaRuntime
+        # DependenciesLayer: !Ref DependenciesLayer
+        MainEventBusName: !GetAtt EventBus.Outputs.MainBusName
+
+  IAM:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./src/iam/template.yaml
+      Parameters:
+        Project: !Ref Project
+        NodeEnv: !Ref NodeEnv
+        LambdaRuntime: !Ref LambdaRuntime
+        # DependenciesLayer: !Ref DependenciesLayer
+        MainEventBusName: !GetAtt EventBus.Outputs.MainBusName
+        DomainName: !Ref DomainName
+        LocalhostPort: !Ref LocalhostPort
+  
+  Products:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./src/products/template.yaml
+      Parameters:
+        Project: !Ref Project
+        NodeEnv: !Ref NodeEnv
+        LambdaRuntime: !Ref LambdaRuntime
+        # DependenciesLayer: !Ref DependenciesLayer
+        MainEventBusName: !GetAtt EventBus.Outputs.MainBusName
+
+  Access:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./src/access/template.yaml
+      Parameters:
+        Project: !Ref Project
+        NodeEnv: !Ref NodeEnv
+        SharedBucketName: !GetAtt Shared.Outputs.SharedBucketName
+        UserPoolId: !GetAtt IAM.Outputs.UserPoolId
+        IdentityPoolId: !GetAtt IAM.Outputs.IdentityPoolId
+        ProductsTableName: !GetAtt Products.Outputs.ProductsTableName
+
+
+Outputs:
+
+  AccountId:
+    Value: !Ref AWS::AccountId
+
+  Region: 
+    Value: !Ref AWS::Region
+
+  Environment:
+    Value: !Ref NodeEnv
+
+  SharedBucketName:
+    Value: !GetAtt Shared.Outputs.SharedBucketName
+
+  UserPoolId:
+    Value: !GetAtt IAM.Outputs.UserPoolId
+
+  UserPoolClientId:
+    Value: !GetAtt IAM.Outputs.UserPoolClientId
+
+  IdentityPoolId:
+    Value: !GetAtt IAM.Outputs.IdentityPoolId
+
+  ProductsTable:
+    Value: !GetAtt Products.Outputs.ProductsTableName
+

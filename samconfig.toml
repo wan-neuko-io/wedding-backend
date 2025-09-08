@@ -1,0 +1,29 @@
+version = 0.1
+
+[local]
+
+[local.package]
+[local.package.parameters]
+template_file = "template.yaml"
+output_template_file = "package.yaml"
+s3_prefix = "wedding-backend-dev"
+region = "ap-southeast-1"
+
+[local.deploy]
+[local.deploy.parameters]
+stack_name = "wedding-backend-dev"
+s3_prefix = "wedding-backend-dev"
+region = "ap-southeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+parameter_overrides = "Project=\"wedding\" NodeEnv=\"dev\" Runtime=\"nodejs20.x\""
+tags = "Project=\"wedding\" Environment=\"dev\""
+
+[dev]
+
+[dev.package]
+[dev.package.parameters]
+template_file = "template.yaml"
+output_template_file = "package.yaml"
+s3_prefix = "wedding-backend-dev"
+region = "ap-southeast-1"

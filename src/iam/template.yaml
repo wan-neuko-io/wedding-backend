@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Identity and access Management
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  LambdaRuntime:
+    Type: String
+  # DependenciesLayer:
+  #   Type: String
+  MainEventBusName:
+    Type: String
+  DomainName:
+    Type: String
+  LocalhostPort:
+    Type: String
+    Default: '8888'
+  SubDomain:
+    Type: String
+    Default: app
+  # GoogleClientId:
+  #   Type: String
+  # GoogleClientSecret:
+  #   Type: String
+  # AppleClientId:
+  #   Type: String
+  # AppleTeamId:
+  #   Type: String
+  # AppleKeyId:
+  #   Type: String
+  # ApplePrivateKey:
+  #   Type: String
+
+Conditions:
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: !Ref LambdaRuntime
+    MemorySize: 128
+    # Layers:
+    #   - !Ref DependenciesLayer
+    Environment:
+      Variables:
+        NODE_ENV: !Ref NodeEnv
+        ACCOUNT_ID: !Ref AWS::AccountId
+        REGION: !Ref AWS::Region
+        PROJECT_NAME: !Ref Project
+        MAIN_EVENTS_BUSNAME: !Ref MainEventBusName
+    Tags:
+      Project: !Ref Project
+      Environment: !Ref NodeEnv
+      Service: iam
+
+Resources:
+
+  LinkUserIdentities:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${Project}-iam-linkuseridentities-${NodeEnv}
+      Handler: ./link-user-identities.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        -
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Action:
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminUpdateUserAttributes
+                - cognito-idp:ListUsers
+                - cognito-idp:AdminLinkProviderForUser
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminSetUserPassword
+              Resource: "*"
+
+  # UserPoolsSMSRole:
+  #   Type: "AWS::IAM::Role"
+  #   Properties:
+  #     AssumeRolePolicyDocument: 
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - 
+  #           Effect: "Allow"
+  #           Principal: 
+  #             Service: cognito-idp.amazonaws.com
+  #           Action: 
+  #             - sts:AssumeRole
+  #           Condition:
+  #             StringEquals: 
+  #               "sts:ExternalId": !Sub ${Project}-userpoolsms-${NodeEnv}
+  #               "aws:SourceAccount": !Ref AWS::AccountId
+  #             ArnLike:
+  #               "aws:SourceArn": !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*"
+  #     Policies:
+  #       - PolicyName: !Sub ${Project}-UserPoolsSMSRolePolicy-${NodeEnv}
+  #         PolicyDocument:
+  #           Version: "2012-10-17"
+  #           Statement:
+  #             - Effect: Allow
+  #               Action: sns:Publish
+  #               Resource: '*'
+  
+  # HomeOwnerConfirmedSignUp:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     FunctionName: !Sub ownerconfirmedsignup-${NodeEnv}
+  #     Handler: ./confirmed-signup-owner.handler
+  #     Policies:
+  #       - AWSLambdaBasicExecutionRole
+  #       -
+  #         EventBridgePutEventsPolicy:
+  #           EventBusName: !Ref MainEventBusName
+  
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolTags:
+        Project: !Ref Project
+        Environment: !Ref NodeEnv
+        Service: iam
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          -
+            Name: verified_email
+            Priority: 1
+          # -
+          #   Name: verified_phone_number
+          #   Priority: 2
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      UsernameAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: False
+      AutoVerifiedAttributes:
+        - email
+        # - phone_number
+      EmailVerificationSubject: !Sub ${Project} - Validation Code
+      EmailVerificationMessage: Your validation code is {####}
+      LambdaConfig:
+        PreSignUp: !GetAtt LinkUserIdentities.Arn
+      # SmsConfiguration:
+      #   ExternalId: !Sub ${Project}-userpoolsms-${NodeEnv}
+      #   SnsCallerArn: !GetAtt UserPoolsSMSRole.Arn
+      #   SnsRegion: !Sub ${AWS::Region}
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      Schema:
+        -
+          Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        -
+          Name: phone_number
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        -
+          Name: nickname
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        -
+          Name: role
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+
+  LinkUserPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LinkUserIdentities.Arn
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt UserPool.Arn
+  
+  # GoogleIdentityProvider:
+  #   Type: AWS::Cognito::UserPoolIdentityProvider
+  #   Properties:
+  #     UserPoolId: !Ref UserPool
+  #     ProviderName: Google
+  #     ProviderType: Google
+  #     ProviderDetails:
+  #       client_id: !Ref GoogleClientId
+  #       client_secret: !Ref GoogleClientSecret
+  #       authorize_scopes: "profile email openid"
+  #     AttributeMapping:
+  #       username: "sub"
+  #       email: "email"
+  #       email_verified: "email_verified"
+  #       name: "name"
+  
+  # AppleIdentityProvider:
+  #   Type: AWS::Cognito::UserPoolIdentityProvider
+  #   Properties:
+  #     UserPoolId: !Ref UserPool
+  #     ProviderName: "SignInWithApple"
+  #     ProviderDetails:
+  #       client_id: !Ref AppleClientId
+  #       team_id: !Ref AppleTeamId
+  #       key_id: !Ref AppleKeyId
+  #       private_key: !Ref ApplePrivateKey
+  #       authorize_scopes: "email name"
+  #     ProviderType: "SignInWithApple"
+  #     AttributeMapping:
+  #       username: "sub"
+  #       email: "email"
+  #       email_verified: "email_verified"
+  #       name: "name"
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    # DependsOn: 
+      # - GoogleIdentityProvider
+      # - AppleIdentityProvider
+    Properties:
+      AllowedOAuthFlowsUserPoolClient: true
+      GenerateSecret: false
+      AllowedOAuthFlows:
+        - code
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+        - aws.cognito.signin.user.admin
+      ReadAttributes:
+        - email
+        - phone_number
+        - nickname
+        - "custom:role"
+      WriteAttributes:
+        - email
+        - phone_number
+        - nickname
+        - "custom:role"
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity:
+        Fn::If:
+          - IsProduction
+          - 365
+          - 30
+      SupportedIdentityProviders:
+        - COGNITO
+        # - Google
+        # - SignInWithApple
+      UserPoolId: !Ref UserPool
+      DefaultRedirectURI: !If [ IsProduction, !Sub "https://${SubDomain}.${DomainName}/oauth", !Sub "https://${SubDomain}-${NodeEnv}.${DomainName}/oauth"]
+      CallbackURLs: 
+        - !If [ IsProduction, !Ref AWS::NoValue, !Sub "http://localhost:${LocalhostPort}/oauth"] 
+        - !If [ IsProduction, !Sub "https://${SubDomain}.${DomainName}/oauth", !Sub "https://${SubDomain}-${NodeEnv}.${DomainName}/oauth"]
+        - https://oauth.pstmn.io/v1/browser-callback
+        - https://oauth.pstmn.io/v1/callback
+        # - com.organization.project://
+      LogoutURLs: 
+        - !If [ IsProduction, !Ref AWS::NoValue, !Sub "http://localhost:${LocalhostPort}/logout" ] 
+        - !If [ IsProduction, !Sub "https://${SubDomain}.${DomainName}/logout", !Sub "https://${SubDomain}-${NodeEnv}.${DomainName}/logout" ]
+        # - com.organization.project://
+
+  WebAuthClientDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !If [ IsProduction, !Ref Project, !Sub "${Project}-${NodeEnv}" ]
+      UserPoolId: !Ref UserPool
+
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders: 
+        - 
+          ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+          ServerSideTokenCheck: true
+
+  # EventHandler:
+  #   Type: AWS::Serverless::Application
+  #   Properties:
+  #     Location: ./events/template.yaml
+  #     Parameters:
+  #       Project: !Ref Project
+  #       NodeEnv: !Ref NodeEnv
+  #       LambdaRuntime: !Ref LambdaRuntime
+  #       DependenciesLayer: !Ref DependenciesLayer
+  #       MainEventBusName: !Ref MainEventBusName
+  #       StripeKey: !Ref StripeKey
+
+Outputs:
+
+  UserPoolId:
+    Value: !Ref UserPool
+
+  ProviderName:
+    Value: !GetAtt UserPool.ProviderName
+
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+
+  IdentityPoolId:
+    Value: !Ref IdentityPool

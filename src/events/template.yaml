@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Event Manager
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  LambdaRuntime:
+    Type: String
+  # DependenciesLayer:
+  #   Type: String
+
+Conditions:
+  IsDevelopment: !Equals [!Ref NodeEnv, 'dev']
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: !Ref LambdaRuntime
+    MemorySize: 128
+    # Layers:
+    #   - !Ref DependenciesLayer
+    Environment:
+      Variables:
+        PROJECT_NAME: !Ref Project
+        NODE_ENV: !Ref NodeEnv
+        ACCOUNT_ID: !Ref AWS::AccountId
+        REGION: !Ref AWS::Region
+    Tags:
+      Project: !Ref Project
+      Environment: !Ref NodeEnv
+      Service: event
+
+Resources:
+
+  MainBus: 
+    Type: AWS::Events::EventBus
+    Properties: 
+      Name: !Sub events.${Project}.${NodeEnv}
+      Tags:
+        -
+          Key: Project
+          Value: !Ref Project
+        -
+          Key: Environment
+          Value: !Ref NodeEnv
+        -
+          Key: Service
+          Value: event
+
+Outputs:
+
+  MainBusName:
+    Value: !Ref MainBus

@@ -1,0 +1,249 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Access Roles and Policies
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  SharedBucketName:
+    Type: String
+
+  # IAM
+  UserPoolId:
+    Type: String
+  IdentityPoolId:
+    Type: String
+
+  # PRODUCTS
+  ProductsTableName:
+    Type: String
+
+  # # API
+  # RestApiId:
+  #   Type: String
+
+Conditions:
+  IsDevelopment: !Equals [!Ref NodeEnv, 'dev']
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Resources:
+
+  CommonStoragePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Common storage policy for all user groups
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - 
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub arn:aws:s3:::${SharedBucketName}/${Project}/public/*
+              - !Sub arn:aws:s3:::${SharedBucketName}/${Project}/protected/*
+          - 
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:aws:s3:::${SharedBucketName}/${Project}/public/${!cognito-identity.amazonaws.com:sub}/*
+              - !Sub arn:aws:s3:::${SharedBucketName}/${Project}/protected/${!cognito-identity.amazonaws.com:sub}/*
+              - !Sub arn:aws:s3:::${SharedBucketName}/${Project}/private/${!cognito-identity.amazonaws.com:sub}/*
+  
+  CommonPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Common policy for all user groups
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - 
+            Effect: "Allow"
+            Action:
+              - "cognito-sync:*"
+              - "mobileanalytics:PutEvents"
+            Resource: "*"
+          - 
+            Effect: "Allow"
+            Action:
+              - "dynamodb:GetItem"
+              - "dynamodb:UpdateItem"
+              - "dynamodb:Query"
+            Resource:
+              - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProductsTableName}
+              - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProductsTableName}/index/*
+
+  # ApiInvokePolicy:
+  #   Type: 'AWS::IAM::ManagedPolicy'
+  #   Properties:
+  #     Description: Common policy for all user groups
+  #     Path: /
+  #     PolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - 
+  #           Effect: "Allow"
+  #           Action:
+  #             - execute-api:Invoke
+  #           Resource:
+  #             - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiId}/${NodeEnv}/GET/account/iam/path"
+  #             - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiId}/${NodeEnv}/POST/account/iam/path"
+
+  AuthenticatedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - 
+            Effect: "Allow"
+            Principal: 
+              Federated: "cognito-identity.amazonaws.com"
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals: 
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPoolId
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      ManagedPolicyArns:
+        - !Ref CommonStoragePolicy
+        - !Ref CommonPolicy
+
+  UnauthenticatedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - 
+            Effect: "Allow"
+            Principal: 
+              Federated: "cognito-identity.amazonaws.com"
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals: 
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPoolId
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: unauthenticated
+      ManagedPolicyArns:
+        - !Ref CommonPolicy
+
+  # AdminUsersRole:
+  #   Type: "AWS::IAM::Role"
+  #   Properties:
+  #     AssumeRolePolicyDocument: 
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - 
+  #           Effect: "Allow"
+  #           Principal: 
+  #             Federated: "cognito-identity.amazonaws.com"
+  #           Action: 
+  #             - "sts:AssumeRoleWithWebIdentity"
+  #           Condition:
+  #             StringEquals: 
+  #               cognito-identity.amazonaws.com:aud: !Ref AdminIdentityPoolId
+  #             ForAnyValue:StringLike:
+  #               cognito-identity.amazonaws.com:amr: authenticated
+  #     ManagedPolicyArns:
+  #       - !Ref CommonStoragePolicy
+  #       - !Ref CommonPolicy
+
+  # AdminAdministratorRole:
+  #   Type: "AWS::IAM::Role"
+  #   Properties:
+  #     AssumeRolePolicyDocument: 
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - 
+  #           Effect: "Allow"
+  #           Principal: 
+  #             Federated: "cognito-identity.amazonaws.com"
+  #           Action: 
+  #             - "sts:AssumeRoleWithWebIdentity"
+  #           Condition:
+  #             StringEquals: 
+  #               cognito-identity.amazonaws.com:aud: !Ref AdminIdentityPoolId
+  #             ForAnyValue:StringLike:
+  #               cognito-identity.amazonaws.com:amr: authenticated
+  #     ManagedPolicyArns:
+  #       - !Ref CommonStoragePolicy
+  #       - !Ref CommonPolicy
+
+  # AdminUsersGroup:
+  #   Type: AWS::Cognito::UserPoolGroup
+  #   Properties:
+  #     Description: !Sub "${Project}/${NodeEnv} System Generated Users"
+  #     GroupName: Users
+  #     Precedence: 0
+  #     RoleArn: !GetAtt AdminUsersRole.Arn
+  #     UserPoolId: !Ref AdminUserPoolId
+
+  # AdminAdministratorGroup:
+  #   Type: AWS::Cognito::UserPoolGroup
+  #   Properties:
+  #     Description: !Sub "${Project}/${NodeEnv} System Generated Administrators"
+  #     GroupName: Administrator
+  #     Precedence: 0
+  #     RoleArn: !GetAtt AdminAdministratorRole.Arn
+  #     UserPoolId: !Ref AdminUserPoolId
+
+  # AdminIdentityPoolRoleMapping:
+  #   Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+  #   Properties:
+  #     IdentityPoolId: !Ref AdminIdentityPoolId
+  #     RoleMappings:
+  #       Administrators:
+  #         Type: Rules
+  #         IdentityProvider: !Sub cognito-idp.${AWS::Region}.amazonaws.com/${AdminUserPoolId}:${AdminWebUserClientId}
+  #         AmbiguousRoleResolution: AuthenticatedRole
+  #         RulesConfiguration:
+  #           Rules:
+  #             -
+  #               Claim: cognito:groups
+  #               MatchType: Contains
+  #               RoleARN: !GetAtt AdminAdministratorRole.Arn
+  #               Value: Administrator
+  #     Roles:
+  #       authenticated: !GetAtt AuthenticatedAdminRole.Arn
+  #       unauthenticated: !GetAtt UnauthenticatedAdminRole.Arn
+
+  # AdminSuperUser:
+  #   Type: AWS::Cognito::UserPoolUser
+  #   Properties:
+  #     UserAttributes: 
+  #       - 
+  #         Name: name
+  #         Value: 'Super User'
+  #       - 
+  #         Name: email
+  #         Value: !Ref SuperAdminEmail
+  #       - 
+  #         Name: email_verified
+  #         Value: 'True'
+  #     Username: !Ref SuperAdminEmail
+  #     UserPoolId: !Ref AdminUserPoolId
+
+  # AdminSuperUserAdminstratorGroup:
+  #   Type: AWS::Cognito::UserPoolUserToGroupAttachment
+  #   Properties:
+  #     GroupName: !Ref AdminAdministratorGroup
+  #     Username: !Ref SuperAdminEmail
+  #     UserPoolId: !Ref AdminUserPoolId
+
+  IdentityPoolRoleMapping:
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref IdentityPoolId
+      Roles:
+        authenticated: !GetAtt AuthenticatedRole.Arn
+        unauthenticated: !GetAtt UnauthenticatedRole.Arn

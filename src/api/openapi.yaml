@@ -1,0 +1,643 @@
+openapi: 3.0.1
+
+info:
+  title: 
+    Fn::Sub: '${Project}.${NodeEnv} - Rest API'
+  version: 1.0.0
+
+tags:
+  - 
+    name: account
+    description: Account service for strategic partners.
+
+securityDefinitions:
+
+  AwsIamAuthorizer:
+    type: "apiKey"
+    name: "Authorization"
+    in: "header"
+    x-amazon-apigateway-authtype: "awsSigv4"
+
+  CognitoUserPool:
+    type: apiKey
+    name: Authorization
+    in: header
+    x-amazon-apigateway-authtype: cognito_user_pools
+    x-amazon-apigateway-authorizer:
+      type: cognito_user_pools
+      providerARNs:
+        - 
+          Fn::Sub: arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}
+
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
+  params:
+    validateRequestBody: false
+    validateRequestParameters: true
+
+paths:
+
+  /account/cognito/path:
+    get:
+      tags:
+        - account
+      # summary: List customer premises
+      # description: Customers API. List customer premises
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      security:
+        - CognitoUserPool: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AnyObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-amazon-apigateway-integration:
+        type: aws
+        httpMethod: POST
+        credentials: 
+          Fn::GetAtt: ApiRole.Arn
+        uri:
+          Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DummyEchoFunctionArn}/invocations'
+        requestTemplates:
+          application/json: |
+            {
+              "user_id": "$context.authorizer.claims.sub"
+            }
+        responses:
+          default:
+            statusCode: 200
+            responseParameters:
+              method.response.header.Cache-Control: "'max-age=5'"
+              method.response.header.Access-Control-Allow-Headers: '''*'''
+              method.response.header.Access-Control-Allow-Methods: '''*'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            responseTemplates:
+              application/json: |
+                $input.json('$')
+          .*BadRequest.*:
+              statusCode: 400
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=3600'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*AccessDenied.*:
+              statusCode: 401
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*NotFound.*:
+              statusCode: 404
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*InternalServerError.*:
+              statusCode: 500
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+    post:
+      tags:
+        - account
+      # summary: Create new customer premises
+      # description: Customers API. Create new customer premises
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      security:
+        - CognitoUserPool: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                  minLength: 3
+                  maxLength: 128
+      x-amazon-apigateway-request-validator: all
+      responses:
+        '200':
+          $ref: '#/components/responses/AnyObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-amazon-apigateway-integration:
+        type: aws
+        httpMethod: POST
+        credentials: 
+          Fn::GetAtt: ApiRole.Arn
+        uri:
+          Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DummyEchoFunctionArn}/invocations'
+        requestTemplates:
+          application/json: |
+            {
+              "user_id": "$context.authorizer.claims.sub",
+              "name": $input.json('$.name')
+            }
+        responses:
+          default:
+            statusCode: 200
+            responseParameters:
+              method.response.header.Cache-Control: "'max-age=0'"
+              method.response.header.Access-Control-Allow-Headers: '''*'''
+              method.response.header.Access-Control-Allow-Methods: '''*'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            responseTemplates:
+              application/json: |
+                $input.json('$')
+          .*BadRequest.*:
+              statusCode: 400
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=3600'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*AccessDenied.*:
+              statusCode: 401
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*NotFound.*:
+              statusCode: 404
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*InternalServerError.*:
+              statusCode: 500
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+    
+  /account/iam/path:
+    get:
+      tags:
+        - account
+      # summary: List accounts for stratefic partner
+      # description: Strategic Partner API. List accounts for stratefic partner
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      security:
+        - AwsIamAuthorizer: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AnyObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-amazon-apigateway-integration:
+        type: aws
+        httpMethod: POST
+        credentials: 
+          Fn::GetAtt: ApiRole.Arn
+        uri:
+          Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DummyEchoFunctionArn}/invocations'
+        requestTemplates:
+          application/json: |
+            {
+              "user_id": "$context.identity.cognitoAuthenticationProvider"
+            }
+        responses:
+          default:
+            statusCode: 200
+            responseParameters:
+              method.response.header.Cache-Control: "'max-age=5'"
+              method.response.header.Access-Control-Allow-Headers: '''*'''
+              method.response.header.Access-Control-Allow-Methods: '''*'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            responseTemplates:
+              application/json: |
+                $input.json('$')
+          .*BadRequest.*:
+              statusCode: 400
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=3600'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*AccessDenied.*:
+              statusCode: 401
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*NotFound.*:
+              statusCode: 404
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*InternalServerError.*:
+              statusCode: 500
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+    post:
+      tags:
+        - account
+      # summary: Create new stratefic partner account
+      # description: Strategic Partner API. Create new stratefic partner account
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      security:
+        - AwsIamAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                  minLength: 3
+                  maxLength: 128
+      x-amazon-apigateway-request-validator: all
+      responses:
+        '200':
+          $ref: '#/components/responses/AnyObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-amazon-apigateway-integration:
+        type: aws
+        httpMethod: POST
+        credentials: 
+          Fn::GetAtt: ApiRole.Arn
+        uri:
+          Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DummyEchoFunctionArn}/invocations'
+        requestTemplates:
+          application/json: |
+            {
+              "user_id": "$context.identity.cognitoAuthenticationProvider",
+              "name": $input.json('$.name')
+            }
+        responses:
+          default:
+            statusCode: 200
+            responseParameters:
+              method.response.header.Cache-Control: "'max-age=0'"
+              method.response.header.Access-Control-Allow-Headers: '''*'''
+              method.response.header.Access-Control-Allow-Methods: '''*'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            responseTemplates:
+              application/json: |
+                $input.json('$')
+          .*BadRequest.*:
+              statusCode: 400
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=3600'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*AccessDenied.*:
+              statusCode: 401
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*NotFound.*:
+              statusCode: 404
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+          .*InternalServerError.*:
+              statusCode: 500
+              responseParameters:
+                method.response.header.Cache-Control: "'max-age=30'"
+                method.response.header.Access-Control-Allow-Headers: '''*'''
+                method.response.header.Access-Control-Allow-Methods: '''*'''
+                method.response.header.Access-Control-Allow-Origin: '''*'''
+              responseTemplates:
+                application/json: |
+                  {
+                    "Message": "$input.path('$.errorMessage')"
+                  }
+
+components:
+
+  schemas:
+
+    StringHeader:
+      $schema: "http://json-schema.org/draft-04/schema#"
+      title: StringHeaderModel
+      type: object
+      required:
+        - schema
+      additionalProperties: false
+      properties:
+        schema:
+          type: string
+
+    BasicErrorMessage:
+      $schema: "http://json-schema.org/draft-04/schema#"
+      title: BasicErrorMessageModel
+      type: object
+      additionalProperties: false
+      required:
+        - Message
+      properties:
+        Message:
+          type: string
+
+    NullMessage:
+      $schema: "http://json-schema.org/draft-04/schema#"
+      title: NullMessageModel
+      type: object
+      additionalProperties: false
+      required:
+        - Message
+      properties:
+        Message:
+          type: string
+          nullable: true
+
+    ObjectAny:
+      $schema: "http://json-schema.org/draft-04/schema#"
+      title: ObjectAny
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+
+  parameters:
+  
+    userIdParam:
+      name: user_id
+      description: User identifier
+      in: query
+      required: true
+      schema:
+        type: string
+  
+  responses:
+
+    Common:
+      description: Common response
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/NullMessage'
+    
+    AnyObject:
+      description: 200 - Success
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          schema:
+            $ref: "#components/schemas/ObjectAny"
+    
+    BadRequest:
+      description: 400 - Bad Request
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+    
+    AccessDenied:
+      description: 401 - Access Denied
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+    
+    Forbidden:
+      description: 403 - Forbidden
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+
+    NotFound:
+      description: 404 - Not Found
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+
+    Timeout:
+      description: 408 - Request Timeout
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+    
+    Gone:
+      description: 410 - Gone
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'
+    
+    InternalServerError:
+      description: 500 - Internal Server Error
+      headers:
+        Cache-Control: 
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Origin:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Methods:
+          $ref: '#/components/schemas/StringHeader'
+        Access-Control-Allow-Headers:
+          $ref: '#/components/schemas/StringHeader'
+      content:
+        application/json:
+          $ref: '#/components/schemas/BasicErrorMessage'

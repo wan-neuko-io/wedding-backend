@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Products and Services
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  LambdaRuntime:
+    Type: String
+  # DependenciesLayer:
+  #   Type: String
+  MainEventBusName:
+    Type: String
+
+Conditions:
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: !Ref LambdaRuntime
+    MemorySize: 128
+    # Layers:
+    #   - !Ref DependenciesLayer
+    Environment:
+      Variables:
+        PROJECT_NAME: !Ref Project
+        NODE_ENV: !Ref NodeEnv
+        ACCOUNT_ID: !Ref AWS::AccountId
+        REGION: !Ref AWS::Region
+        MAIN_EVENTS_BUSNAME: !Ref MainEventBusName
+    Tags:
+      Project: !Ref Project
+      Environment: !Ref NodeEnv
+      Service: shared
+
+Resources:
+
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${Project}-${NodeEnv}-products
+      DeletionProtectionEnabled: true
+      AttributeDefinitions:
+        -
+          AttributeName: "type"
+          AttributeType: "S"
+        -
+          AttributeName: "product_id"
+          AttributeType: "S"
+        -
+          AttributeName: "category"
+          AttributeType: "S"
+        -
+          AttributeName: "active"
+          AttributeType: "S"
+      KeySchema:
+            - 
+              AttributeName: "type"
+              KeyType: "HASH"
+            - 
+              AttributeName: "product_id"
+              KeyType: "RANGE"
+      GlobalSecondaryIndexes:
+        -
+          IndexName: "CategoryIndex"
+          KeySchema:
+            - 
+              AttributeName: "category"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: ALL
+        -
+          IndexName: "ActiveIndex"
+          KeySchema:
+            - 
+              AttributeName: "active"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: ALL
+        -
+          IndexName: "CategoryActiveIndex"
+          KeySchema:
+            - 
+              AttributeName: "category"
+              KeyType: "HASH"
+            - 
+              AttributeName: "active"
+              KeyType: "RANGE"
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+
+Outputs:
+
+  ProductsTableName:
+    Value: !Ref ProductsTable
+
+
+

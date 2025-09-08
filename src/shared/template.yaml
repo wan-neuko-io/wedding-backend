@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Regional Shared Resources
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  LambdaRuntime:
+    Type: String
+  # DependenciesLayer:
+  #   Type: String
+  MainEventBusName:
+    Type: String
+
+Conditions:
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: !Ref LambdaRuntime
+    MemorySize: 128
+    # Layers:
+    #   - !Ref DependenciesLayer
+    Environment:
+      Variables:
+        PROJECT_NAME: !Ref Project
+        NODE_ENV: !Ref NodeEnv
+        ACCOUNT_ID: !Ref AWS::AccountId
+        REGION: !Ref AWS::Region
+        MAIN_EVENTS_BUSNAME: !Ref MainEventBusName
+    Tags:
+      Project: !Ref Project
+      Environment: !Ref NodeEnv
+      Service: shared
+
+Resources:
+
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${Project}-${NodeEnv}-sharedbucket
+      AccessControl: Private
+      BucketEncryption: 
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          -
+            AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - Date
+            MaxAge: 3600
+      # LifecycleConfiguration:
+      #   Rules:
+      #     - 
+      #       Id: archived_tier
+      #       Prefix: archived
+      #       Status: Enabled
+      #       Transitions:
+      #         - 
+      #           TransitionInDays: 0
+      #           StorageClass: INTELLIGENT_TIERING
+      #     - 
+      #       Id: accounts_tier
+      #       Prefix: accounts
+      #       Status: Enabled
+      #       Transitions:
+      #         - 
+      #           TransitionInDays: 0
+      #           StorageClass: INTELLIGENT_TIERING
+      Tags:
+        - 
+          Key: Project
+          Value: !Ref Project
+        - 
+          Key: Environment
+          Value: !Ref NodeEnv
+        - 
+          Key: Service
+          Value: shared
+
+  DummyEchoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub shared-DummyEchoFunction-${NodeEnv}
+      Handler: ./echo.handler
+      # Environment:
+      #   Variables:
+      #     CUSTOMER_PREMISE_TABLENAME: !Ref CustomerPremisesTable
+      #     PLACES_INDEX_NAME: !Ref DefaultPlaceIndexName
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+Outputs:
+
+  SharedBucketName:
+    Value: !Ref S3Bucket
+    # Export:
+    #   Name: !Sub '${Project}:${NodeEnv}:shared:bucket:name'
+
+  DummyEchoFunctionArn:
+    Value: !GetAtt DummyEchoFunction.Arn

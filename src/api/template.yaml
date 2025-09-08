@@ -1,0 +1,187 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: RestFul API
+  
+Parameters:
+
+  Project:
+    Type: String
+  NodeEnv:
+    Type: String
+  UserPoolId:
+    Type: String
+  DummyEchoFunctionArn:
+    Type: String
+
+Conditions:
+  IsProduction: !Equals [!Ref NodeEnv, 'production']
+
+Resources:
+
+  # NOTE
+  # Ensure API Gateway has been enabled to access cloudwatch Log by using Role.
+  RestApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - 
+            Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - 
+          PolicyName: !Sub ${Project}-${NodeEnv}-api-role-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - 
+                Effect: Allow
+                Action: 
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                Resource: '*'
+              - 
+                Effect: Allow
+                Action: 
+                  - lambda:InvokeFunction
+                Resource:
+                  - !Ref DummyEchoFunctionArn
+              # - 
+              #   Effect: Allow
+              #   Action: 
+              #     - states:StartSyncExecution
+              #   Resource:
+              #     - !Ref PartnerQueueJobStepsArn
+              # - 
+              #   Effect: Allow
+              #   Action: 
+              #     - appsync:GraphQL
+              #   Resource:
+              #     - !Sub arn:aws:appsync:${AWS::Region}:${AWS::AccountId}:apis/${CommerceGraphqlEndpointId}/*
+      Tags:
+        -
+          Key: Project
+          Value: !Ref Project
+        -
+          Key: Environment
+          Value: !Ref NodeEnv
+        -
+          Key: Service
+          Value: api
+        
+
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      AccessLogSetting:
+        DestinationArn: !GetAtt RestApiLogs.Arn
+        Format: '{"requestId":"$context.requestId","extendedRequestId":"$context.extendedRequestId","ip": "$context.identity.sourceIp", "userId":"$context.identity.cognitoAuthenticationProvider", "user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength","errorMessage": "$context.error.message","errorValidation": "$context.error.validationErrorString"}'
+      StageName: !Ref NodeEnv
+      Cors:
+        AllowMethods: "'POST, PATCH, GET, PUT, DELETE'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+        AllowCredentials: false
+      EndpointConfiguration:
+        Type: REGIONAL
+      DefinitionBody: 
+        'Fn::Transform':
+          Name: 'AWS::Include'
+          Parameters:
+            Location: ./openapi.yaml
+      Tags:
+        Project: !Ref Project
+        Environment: !Ref NodeEnv
+        Service: api
+      GatewayResponses:
+        UNAUTHORIZED:
+          StatusCode: '401'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": $context.error.messageString
+              }
+        ACCESS_DENIED:
+          StatusCode: '403'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": "$context.error.message"
+              }
+        RESOURCE_NOT_FOUND:
+          StatusCode: '404'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": "$context.error.message"
+              }
+        BAD_REQUEST_PARAMETERS:
+          StatusCode: '400'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": "$context.error.validationErrorString"
+              }
+        BAD_REQUEST_BODY:
+          StatusCode: '400'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": "$context.error.validationErrorString"
+              }
+        DEFAULT_5XX:
+          StatusCode: '500'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+          ResponseTemplates:
+            application/json: |
+              {
+                "Message": "$context.error.message"
+              }
+
+Outputs:
+
+  RestApiId:
+    Value: !Ref RestApi
+
+  RestApiHostname:
+    Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${NodeEnv}'
